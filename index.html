@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buscador de Países</title>
+  <style>
+    :root {
+      --bg-top: #17204a;
+      --bg-bottom: #090d1e;
+      --accent: #6366f1;
+      --card-bg: rgba(18, 25, 54, 0.84);
+      --card-border: rgba(255, 255, 255, 0.16);
+      --text-main: #f8fafc;
+      --text-muted: #cbd5e1;
+    }
+
+    /* Cambia el color del fondo según la hora local del país seleccionado */
+    body.time-default {
+      --bg-top: #17204a;
+      --bg-bottom: #090d1e;
+      --accent: #6366f1;
+    }
+
+    body.time-dawn {
+      --bg-top: #7c3aed;
+      --bg-bottom: #d97706;
+      --accent: #fbbf24;
+    }
+
+    body.time-day {
+      --bg-top: #0284c7;
+      --bg-bottom: #1e3a8a;
+      --accent: #38bdf8;
+    }
+
+    body.time-dusk {
+      --bg-top: #9d174d;
+      --bg-bottom: #311042;
+      --accent: #fb7185;
+    }
+
+    body.time-night {
+      --bg-top: #090d24;
+      --bg-bottom: #03050f;
+      --accent: #818cf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text-main);
+      background: linear-gradient(155deg, var(--bg-top), var(--bg-bottom));
+      transition: background 1.2s ease;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Planeta girando de fondo */
+    .space-background {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .planet-orbit {
+      position: absolute;
+      right: -70px;
+      top: 14%;
+      width: 340px;
+      height: 340px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.45;
+    }
+
+    .planet {
+      position: relative;
+      width: 250px;
+      height: 250px;
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow:
+        inset -28px -22px 48px rgba(0, 0, 0, 0.78),
+        0 0 45px rgba(99, 102, 241, 0.35);
+    }
+
+    .planet-surface {
+      position: absolute;
+      inset: 0;
+      width: 200%;
+      height: 100%;
+      background:
+        radial-gradient(circle at 22% 35%, rgba(74, 222, 128, 0.78) 0 18%, transparent 19%),
+        radial-gradient(circle at 45% 65%, rgba(34, 197, 94, 0.72) 0 22%, transparent 23%),
+        radial-gradient(circle at 72% 28%, rgba(52, 211, 153, 0.68) 0 15%, transparent 16%),
+        radial-gradient(circle at 85% 70%, rgba(16, 185, 129, 0.72) 0 20%, transparent 21%),
+        linear-gradient(90deg, #1d4ed8 0%, #2563eb 50%, #1d4ed8 100%);
+      animation: spinPlanet 26s linear infinite;
+    }
+
+    .planet-atmosphere {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.25), transparent 60%);
+    }
+
+    @keyframes spinPlanet {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+
+    /* Contenedor principal */
+    .app-container {
+      position: relative;
+      z-index: 1;
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .hero-header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .hero-header h1 {
+      font-size: clamp(2rem, 4vw, 2.85rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .search-wrapper {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    #countryInput {
+      width: 100%;
+      padding: 0.95rem 1.25rem;
+      font-size: 1.05rem;
+      color: var(--text-main);
+      background: rgba(15, 23, 42, 0.82);
+      border: 1.5px solid var(--card-border);
+      border-radius: 14px;
+      outline: none;
+      backdrop-filter: blur(10px);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    #countryInput::placeholder {
+      color: #94a3b8;
+    }
+
+    #countryInput:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.24);
+    }
+
+    .results-section {
+      min-height: 150px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .message {
+      text-align: center;
+      font-size: 1.08rem;
+      color: var(--text-muted);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 1rem 1.5rem;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* Cuadrícula para 2 a 10 países */
+    .countries-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 1.15rem;
+    }
+
+    .country-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      overflow: hidden;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: transform 0.2s ease, border-color 0.2s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .country-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+    }
+
+    .country-card img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.06);
+      display: block;
+    }
+
+    .country-card h3 {
+      padding: 0.85rem;
+      font-size: 1rem;
+      text-align: center;
+    }
+
+    /* Tarjeta de detalle para 1 país */
+    .country-detail-card {
+      width: 100%;
+      max-width: 780px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 1.5rem;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 1.75rem;
+      backdrop-filter: blur(12px);
+    }
+
+    .country-flag-side {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .country-flag-side img {
+      width: 100%;
+      height: 175px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: block;
+    }
+
+    .weather-box {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 0.85rem;
+      text-align: center;
+    }
+
+    .country-info-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.65rem;
+    }
+
+    .country-info-side h2 {
+      font-size: 1.75rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .country-info-side p {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    .country-info-side strong {
+      color: var(--text-main);
+    }
+
+    .local-time-badge {
+      display: inline-block;
+      margin-top: 0.35rem;
+      padding: 0.5rem 0.8rem;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.12);
+      font-size: 0.95rem;
+      color: var(--text-main);
+    }
+
+    /* Banderas en la parte inferior */
+    .bottom-flags-section {
+      margin-top: 0.5rem;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.25rem;
+      backdrop-filter: blur(10px);
+    }
+
+    .bottom-flags-title {
+      font-size: 1.15rem;
+      margin-bottom: 1rem;
+      color: var(--text-main);
+    }
+
+    .bottom-flags-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+      gap: 0.75rem;
+      max-height: 260px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+
+    .mini-flag-item {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 0.45rem;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .mini-flag-item:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent);
+    }
+
+    .mini-flag-item img {
+      width: 100%;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 6px;
+      margin-bottom: 0.3rem;
+      display: block;
+    }
+
+    .mini-flag-item span {
+      display: block;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @media (max-width: 720px) {
+      .country-detail-card {
+        grid-template-columns: 1fr;
+      }
+
+      .planet-orbit {
+        width: 220px;
+        height: 220px;
+        right: -60px;
+        top: 6%;
+      }
+
+      .planet {
+        width: 165px;
+        height: 165px;
+      }
+    }
+  </style>
+</head>
+<body class="time-default">
+  <div class="space-background" aria-hidden="true">
+    <div class="planet-orbit">
+      <div class="planet">
+        <div class="planet-surface"></div>
+        <div class="planet-atmosphere"></div>
+      </div>
+    </div>
+  </div>
+
+  <main class="app-container">
+    <header class="hero-header">
+      <h1>Buscador de Países</h1>
+      <div class="search-wrapper">
+        <input
+          type="text"
+          id="countryInput"
+          placeholder="Escribe el nombre de un país..."
+          autocomplete="off"
+        />
+      </div>
+    </header>
+
+    <section id="resultContainer" class="results-section">
+      <div class="welcome-state">
+        <p class="message">Escribe el nombre de un país para comenzar la búsqueda...</p>
+      </div>
+    </section>
+
+
+  <script>
+    const API_KEY_COUNTRIES = 'rc_live_8a3e72b1e77745d79b085cdd0cf77de2';
+    const API_KEY_WEATHER = '7bab0e7a540ecf5526aab8aefbcf9ffc';
+
+    const input = document.getElementById('countryInput');
+    const resultContainer = document.getElementById('resultContainer');
+    const bottomFlagsGrid = document.getElementById('bottomFlagsGrid');
+
+    let todosLosPaises = [];
+    let dicBanderas = {};
+
+    const BANDERA_FALLBACK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" fill="#1e293b"/><circle cx="160" cy="100" r="50" fill="none" stroke="#38bdf8" stroke-width="6"/></svg>'
+    );
+
+    async function cargarDiccionarioBanderas() {
+      try {
+        const res = await fetch('https://restcountries.com/v3.1/all?fields=name,cca2,cca3,flags');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data)) return;
+
+        data.forEach(item => {
+          const iso2 = (item.cca2 || '').trim().toLowerCase();
+          const iso3 = (item.cca3 || '').trim().toLowerCase();
+          const common = (item.name?.common || '').trim().toLowerCase();
+          const official = (item.name?.official || '').trim().toLowerCase();
+          const url = item.flags?.png || item.flags?.svg || (iso2 ? `https://flagcdn.com/w320/${iso2}.png` : '');
+
+          if (!url) return;
+          if (common) dicBanderas[common] = url;
+          if (official) dicBanderas[official] = url;
+          if (iso2) dicBanderas[iso2] = url;
+          if (iso3) dicBanderas[iso3] = url;
+        });
+      } catch (e) {
+        console.warn('No se pudo cargar diccionario v3.1:', e);
+      }
+    }
+
+    function buscarUrlEnObjeto(obj, nivel = 0) {
+      if (!obj || typeof obj !== 'object' || nivel > 4) return '';
+      for (const k of Object.keys(obj)) {
+        const v = obj[k];
+        if (typeof v === 'string') {
+          const s = v.trim();
+          if (s.startsWith('http://') || s.startsWith('https://')) {
+            return s;
+          }
+        } else if (v && typeof v === 'object') {
+          const r = buscarUrlEnObjeto(v, nivel + 1);
+          if (r) return r;
+        }
+      }
+      return '';
+    }
+
+    function buscarCodigoEnObjeto(obj, nivel = 0) {
+      if (!obj || typeof obj !== 'object' || nivel > 4) return '';
+      const claves = ['cca2', 'alpha2Code', 'alpha_2', 'iso2', 'iso_2', 'code', 'cca3', 'alpha3Code', 'alpha_3'];
+      for (const c of claves) {
+        const v = obj[c];
+        if (typeof v === 'string' && /^[a-zA-Z]{2,3}$/.test(v.trim())) {
+          return v.trim().toLowerCase();
+        }
+      }
+      for (const k of Object.keys(obj)) {
+        const v = obj[k];
+        if (v && typeof v === 'object') {
+          const r = buscarCodigoEnObjeto(v, nivel + 1);
+          if (r) return r;
+        }
+      }
+      return '';
+    }
+
+    function obtenerBandera(pais) {
+      if (!pais) return BANDERA_FALLBACK;
+
+      const urlDirecta = buscarUrlEnObjeto(pais.flags) || buscarUrlEnObjeto(pais.flag) || buscarUrlEnObjeto(pais);
+      if (urlDirecta) return urlDirecta;
+
+      const nombreComun = (pais.names?.common || pais.name?.common || '').trim().toLowerCase();
+      if (nombreComun && dicBanderas[nombreComun]) {
+        return dicBanderas[nombreComun];
+      }
+
+      const nombreOficial = (pais.names?.official || pais.name?.official || '').trim().toLowerCase();
+      if (nombreOficial && dicBanderas[nombreOficial]) {
+        return dicBanderas[nombreOficial];
+      }
+
+      const codigo = buscarCodigoEnObjeto(pais);
+      if (codigo && dicBanderas[codigo]) {
+        return dicBanderas[codigo];
+      }
+      if (codigo && codigo.length === 2) {
+        return `https://flagcdn.com/w320/${codigo}.png`;
+      }
+
+      return BANDERA_FALLBACK;
+    }
+
+    async function inicializarPaises() {
+      await cargarDiccionarioBanderas();
+
+      try {
+        const headers = { 'Authorization': `Bearer ${API_KEY_COUNTRIES}` };
+
+        const peticiones = [0, 100, 200].map(offset =>
+          fetch(`https://api.restcountries.com/countries/v5?limit=100&offset=${offset}`, { headers })
+            .then(res => {
+              if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
+              return res.json();
+            })
+        );
+
+        const respuestas = await Promise.all(peticiones);
+        todosLosPaises = respuestas.flatMap(r => r.data?.objects || r.data || []);
+      } catch (error) {
+        console.warn("No se pudo conectar a v5, usando respaldo v3.1...", error);
+        try {
+          const resFallback = await fetch('https://restcountries.com/v3.1/all?fields=name,capital,population,region,subregion,timezones,flags,flag,cca2');
+          const dataFallback = await resFallback.json();
+
+          todosLosPaises = dataFallback.map(p => ({
+            names: { common: p.name?.common || 'Desconocido' },
+            capitals: p.capital || [],
+            population: p.population || 0,
+            region: p.region || 'No disponible',
+            subregion: p.subregion || 'No disponible',
+            timezones: p.timezones || [],
+            flags: p.flags || {},
+            cca2: p.cca2 || ''
+          }));
+        } catch (fallbackError) {
+          console.error("Error al obtener los países:", fallbackError);
+          resultContainer.innerHTML = `<p class="message">Error al conectar con la API. Revisa tu conexión o Allowed Hostnames.</p>`;
+          bottomFlagsGrid.innerHTML = `<p class="message">No se pudieron cargar las banderas.</p>`;
+          return;
+        }
+      }
+
+      renderizarBanderasInferiores(todosLosPaises);
+    }
+
+    function renderizarBanderasInferiores(paises) {
+      if (!paises.length) {
+        bottomFlagsGrid.innerHTML = `<p class="message">No hay banderas disponibles.</p>`;
+        return;
+      }
+
+      bottomFlagsGrid.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+
+      paises.forEach(pais => {
+        const flagSrc = obtenerBandera(pais);
+        const commonName = pais.names?.common || pais.name?.common || 'Desconocido';
+
+        const item = document.createElement('div');
+        item.className = 'mini-flag-item';
+        item.title = commonName;
+        item.innerHTML = `
+          <img src="${flagSrc}" alt="Bandera de ${commonName}" loading="lazy">
+          <span>${commonName}</span>
+        `;
+
+        item.addEventListener('click', () => {
+          input.value = commonName;
+          manejarResultados([pais]);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        fragment.appendChild(item);
+      });
+
+      bottomFlagsGrid.appendChild(fragment);
+    }
+
+    function obtenerInfoHorariaPais(utcStr) {
+      const ahora = new Date();
+      const utcMs = ahora.getTime() + ahora.getTimezoneOffset() * 60000;
+
+      let offsetMinutos = 0;
+      if (typeof utcStr === 'string') {
+        const match = utcStr.match(/UTC([+-])(\d{1,2})(?::?(\d{2}))?/i);
+        if (match) {
+          const signo = match[1] === '-' ? -1 : 1;
+          const horas = parseInt(match[2], 10) || 0;
+          const minutos = parseInt(match[3], 10) || 0;
+          offsetMinutos = signo * (horas * 60 + minutos);
+        }
+      }
+
+      const fechaLocalPais = new Date(utcMs + offsetMinutos * 60000);
+      const hora = fechaLocalPais.getHours();
+      const minutosFormateados = String(fechaLocalPais.getMinutes()).padStart(2, '0');
+      const horaFormateada = String(hora).padStart(2, '0');
+
+      let franja = 'time-day';
+      let etiquetaFranja = 'Día';
+
+      if (hora >= 5 && hora < 8) {
+        franja = 'time-dawn';
+        etiquetaFranja = 'Amanecer';
+      } else if (hora >= 8 && hora < 17) {
+        franja = 'time-day';
+        etiquetaFranja = 'Día';
+      } else if (hora >= 17 && hora < 20) {
+        franja = 'time-dusk';
+        etiquetaFranja = 'Atardecer';
+      } else {
+        franja = 'time-night';
+        etiquetaFranja = 'Noche';
+      }
+
+      return { horaTexto: `${horaFormateada}:${minutosFormateados}`, franja, etiquetaFranja };
+    }
+
+    function aplicarTemaPorHora(claseTema) {
+      document.body.classList.remove('time-default', 'time-dawn', 'time-day', 'time-dusk', 'time-night');
+      document.body.classList.add(claseTema || 'time-default');
+    }
+
+    input.addEventListener('input', (e) => {
+      const textoBusqueda = e.target.value.trim().toLowerCase();
+
+      if (textoBusqueda === '') {
+        aplicarTemaPorHora('time-default');
+        resultContainer.innerHTML = `<div class="welcome-state"><p class="message">Escribe el nombre de un país para comenzar la búsqueda...</p></div>`;
+        return;
+      }
+
+      if (todosLosPaises.length === 0) {
+        resultContainer.innerHTML = `<p class="message">La lista de países está cargando. Intenta de nuevo en un segundo.</p>`;
+        return;
+      }
+
+      const paisesFiltrados = todosLosPaises.filter(pais => {
+        const nombreComun = pais.names?.common || pais.name?.common || '';
+        return nombreComun.toLowerCase().includes(textoBusqueda);
+      });
+
+      manejarResultados(paisesFiltrados);
+    });
+
+    function manejarResultados(paises) {
+      resultContainer.innerHTML = '';
+
+      if (paises.length > 10) {
+        aplicarTemaPorHora('time-default');
+        resultContainer.innerHTML = `<p class="message">Demasiados paises, especifica mejor tu busqueda</p>`;
+        return;
+      }
+
+      if (paises.length > 1 && paises.length <= 10) {
+        aplicarTemaPorHora('time-default');
+        const grid = document.createElement('div');
+        grid.className = 'countries-grid';
+
+        paises.forEach(pais => {
+          const flagSrc = obtenerBandera(pais);
+          const commonName = pais.names?.common || pais.name?.common || 'Desconocido';
+
+          const card = document.createElement('div');
+          card.className = 'country-card';
+          card.innerHTML = `
+            <img src="${flagSrc}" alt="Bandera de ${commonName}" loading="lazy">
+            <h3>${commonName}</h3>
+          `;
+
+          card.addEventListener('click', () => {
+            input.value = commonName;
+            manejarResultados([pais]);
+          });
+
+          grid.appendChild(card);
+        });
+
+        resultContainer.appendChild(grid);
+        return;
+      }
+
+      if (paises.length === 1) {
+        const pais = paises[0];
+        const commonName = pais.names?.common || pais.name?.common || 'Desconocido';
+        const flagSrc = obtenerBandera(pais);
+
+        let capital = 'No disponible';
+        if (pais.capitals && pais.capitals.length > 0) {
+          const capObj = pais.capitals[0];
+          capital = (typeof capObj === 'object' && capObj !== null)
+            ? (capObj.name || capObj.common || Object.values(capObj)[0])
+            : capObj;
+        }
+
+        const habitantes = pais.population ? pais.population.toLocaleString() : 'No disponible';
+        const region = pais.region || pais.geography?.region || 'No disponible';
+        const subregion = pais.subregion || pais.geography?.subregion || 'No disponible';
+        const utc = pais.timezones && pais.timezones.length > 0 ? pais.timezones[0] : 'UTC+00:00';
+
+        const infoHora = obtenerInfoHorariaPais(utc);
+        aplicarTemaPorHora(infoHora.franja);
+
+        resultContainer.innerHTML = `
+          <div class="country-detail-card">
+            <div class="country-flag-side">
+              <img src="${flagSrc}" alt="Bandera de ${commonName}">
+              <div id="weatherBox" class="weather-box">
+                <p>Cargando clima...</p>
+              </div>
+            </div>
+            <div class="country-info-side">
+              <h2>${commonName}</h2>
+              <p><strong>Capital:</strong> ${capital}</p>
+              <p><strong>Habitantes:</strong> ${habitantes} habitantes</p>
+              <p><strong>Región:</strong> ${region}</p>
+              <p><strong>Subregión:</strong> ${subregion}</p>
+              <p><strong>UTC:</strong> ${utc}</p>
+              <div class="local-time-badge">
+                Hora local aprox.: <strong>${infoHora.horaTexto}</strong> (${infoHora.etiquetaFranja})
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (capital !== 'No disponible') {
+          obtenerClima(capital);
+        } else {
+          document.getElementById('weatherBox').innerHTML = `<p>Clima no disponible</p>`;
+        }
+        return;
+      }
+
+      if (paises.length === 0) {
+        aplicarTemaPorHora('time-default');
+        resultContainer.innerHTML = `<p class="message">No se encontró ningún país con ese nombre.</p>`;
+      }
+    }
+
+    async function obtenerClima(ciudad) {
+      const weatherBox = document.getElementById('weatherBox');
+      try {
+        const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(ciudad)}&units=metric&appid=${API_KEY_WEATHER}&lang=es`);
+        const data = await response.json();
+
+        if (response.ok) {
+          const temp = Math.round(data.main.temp);
+          const descripcion = data.weather[0].description;
+          const icono = data.weather[0].icon;
+
+          weatherBox.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+              <img src="https://openweathermap.org/img/wn/${icono}.png" alt="icono clima" style="width: 40px; height: 40px;">
+              <span style="font-size: 1.1rem; font-weight: 700; color: #f8fafc;">${temp} °C</span>
+            </div>
+            <p style="font-size: 0.85rem; color: #94a3b8; text-transform: capitalize;">${descripcion}</p>
+          `;
+        } else {
+          weatherBox.innerHTML = `<p style="font-size: 0.85rem; color: #94a3b8;">Clima no disponible</p>`;
+        }
+      } catch (error) {
+        console.error("Error al obtener el clima:", error);
+        weatherBox.innerHTML = `<p style="font-size: 0.85rem; color: #94a3b8;">Error al cargar clima</p>`;
+      }
+    }
+
+    inicializarPaises();
+  </script>
+</body>
+</html>
