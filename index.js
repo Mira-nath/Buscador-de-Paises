@@ -19,23 +19,6 @@ const BANDERA_RESPALDO_SVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(`
   </svg>
 `);
 
-async function cargarDiccionarioV3() {
-  try {
-    const res = await fetch('https://restcountries.com/v3.1/all?fields=name,cca2,flags');
-    if (!res.ok) return;
-    const lista = await res.json();
-    if (!Array.isArray(lista)) return;
-
-    lista.forEach(p => {
-      const nombre = (p.name?.common || '').trim().toLowerCase();
-      const iso = (p.cca2 || '').trim().toLowerCase();
-      const urlBandera = p.flags?.png || p.flags?.svg || (iso ? `https://flagcdn.com/w320/${iso}.png` : '');
-      if (nombre && iso) dicIsoPorNombre[nombre] = iso;
-      if (nombre && urlBandera) dicBanderaPorNombre[nombre] = urlBandera;
-    });
-  } catch (_) {}
-}
-
 function extraerIsoRecursivo(obj, profundidad = 0) {
   if (!obj || typeof obj !== 'object' || profundidad > 3) return '';
 
@@ -91,8 +74,44 @@ function obtenerBandera(pais) {
   return BANDERA_RESPALDO_SVG;
 }
 
+function normalizarPais(p) {
+  const nombreComun =
+    p.names?.common ||
+    p.name?.common ||
+    (typeof p.name === 'string' ? p.name : '') ||
+    'Desconocido';
+
+  let capitales = [];
+  if (Array.isArray(p.capitals)) {
+    capitales = p.capitals;
+  } else if (Array.isArray(p.capital)) {
+    capitales = p.capital;
+  } else if (typeof p.capital === 'string' && p.capital.trim()) {
+    capitales = [p.capital.trim()];
+  }
+
+  const timezones = Array.isArray(p.timezones)
+    ? p.timezones
+    : Array.isArray(p.geography?.timezones)
+      ? p.geography.timezones
+      : [];
+
+  return {
+    ...p,
+    names: { common: nombreComun },
+    capitals: capitales,
+    population: typeof p.population === 'number' ? p.population : Number(p.population) || 0,
+    region: p.region || p.geography?.region || 'No disponible',
+    subregion: p.subregion || p.geography?.subregion || 'No disponible',
+    timezones: timezones,
+    flags: p.flags || (p.flag ? { png: p.flag, svg: p.flag } : {})
+  };
+}
+
 async function inicializarPaises() {
-  await cargarDiccionarioV3();
+  if (resultContainer) {
+    resultContainer.innerHTML = `<p class="message">Cargando países...</p>`;
+  }
 
   try {
     const campos = 'names,capitals,population,geography,flag,flags,timezones,region,subregion,cca2,alpha2Code,codes';
@@ -100,42 +119,48 @@ async function inicializarPaises() {
 
     const peticiones = [0, 100, 200].map(offset =>
       fetch(`https://api.restcountries.com/countries/v5?limit=100&offset=${offset}&response_fields=${campos}`, { headers })
-        .then(res => {
-          if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
+        .then(async res => {
+          if (!res.ok) {
+            const detalle = await res.text().catch(() => '');
+            throw new Error(`Error HTTP ${res.status}: ${detalle}`);
+          }
           return res.json();
         })
     );
 
     const respuestas = await Promise.all(peticiones);
-    todosLosPaises = respuestas.flatMap(r => r.data?.objects || r.data || []);
-  } catch (error) {
-    console.warn("No se pudo conectar a v5, usando respaldo v3.1...", error);
-    try {
-      const resFallback = await fetch('https://restcountries.com/v3.1/all?fields=name,capital,population,region,subregion,timezones,flags,flag,cca2');
-      const dataFallback = await resFallback.json();
+    const crudos = respuestas.flatMap(r => r.data?.objects || r.data || []);
+    todosLosPaises = crudos.map(normalizarPais);
 
-      todosLosPaises = dataFallback.map(p => ({
-        names: { common: p.name?.common || 'Desconocido' },
-        capitals: p.capital || [],
-        population: p.population || 0,
-        region: p.region || 'No disponible',
-        subregion: p.subregion || 'No disponible',
-        timezones: p.timezones || [],
-        flags: p.flags || {},
-        cca2: p.cca2 || ''
-      }));
-    } catch (fallbackError) {
-      console.error("Error al obtener los países:", fallbackError);
-      resultContainer.innerHTML = `<p class="message">Error al conectar con la API. Revisa tu conexión o Allowed Hostnames.</p>`;
-      bottomFlagsGrid.innerHTML = `<p class="message">No se pudieron cargar las banderas.</p>`;
-      return;
+    if (!todosLosPaises.length) {
+      throw new Error('La API devolvió una lista vacía.');
     }
+
+    if (resultContainer) {
+      resultContainer.innerHTML = `<div class="welcome-state"><p class="message">Escribe el nombre de un país para comenzar la búsqueda...</p></div>`;
+    }
+  } catch (error) {
+    console.error("Error al obtener los países desde v5:", error);
+    if (resultContainer) {
+      resultContainer.innerHTML = `
+        <p class="message">
+          No se pudo cargar la lista de países desde la API (${error.message}).
+          Revisa en tu cuenta de REST Countries si el dominio <strong>mira-nath.github.io</strong> está permitido o si tu plan/clave tiene restricciones en producción.
+        </p>
+      `;
+    }
+    if (bottomFlagsGrid) {
+      bottomFlagsGrid.innerHTML = `<p class="message">No se pudieron cargar las banderas.</p>`;
+    }
+    return;
   }
 
   renderizarBanderasInferiores(todosLosPaises);
 }
 
 function renderizarBanderasInferiores(paises) {
+  if (!bottomFlagsGrid) return;
+
   if (!paises.length) {
     bottomFlagsGrid.innerHTML = `<p class="message">No hay banderas disponibles.</p>`;
     return;
@@ -157,7 +182,7 @@ function renderizarBanderasInferiores(paises) {
     `;
 
     item.addEventListener('click', () => {
-      input.value = commonName;
+      if (input) input.value = commonName;
       manejarResultados([pais]);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
@@ -213,29 +238,36 @@ function aplicarTemaPorHora(claseTema) {
   document.body.classList.add(claseTema || 'time-default');
 }
 
-input.addEventListener('input', (e) => {
-  const textoBusqueda = e.target.value.trim().toLowerCase();
+if (input) {
+  input.addEventListener('input', (e) => {
+    const textoBusqueda = e.target.value.trim().toLowerCase();
 
-  if (textoBusqueda === '') {
-    aplicarTemaPorHora('time-default');
-    resultContainer.innerHTML = `<div class="welcome-state"><p class="message">Escribe el nombre de un país para comenzar la búsqueda...</p></div>`;
-    return;
-  }
+    if (textoBusqueda === '') {
+      aplicarTemaPorHora('time-default');
+      if (resultContainer) {
+        resultContainer.innerHTML = `<div class="welcome-state"><p class="message">Escribe el nombre de un país para comenzar la búsqueda...</p></div>`;
+      }
+      return;
+    }
 
-  if (todosLosPaises.length === 0) {
-    resultContainer.innerHTML = `<p class="message">La lista de países está cargando. Intenta de nuevo en un segundo.</p>`;
-    return;
-  }
+    if (todosLosPaises.length === 0) {
+      if (resultContainer) {
+        resultContainer.innerHTML = `<p class="message">La lista de países está cargando. Intenta de nuevo en un segundo.</p>`;
+      }
+      return;
+    }
 
-  const paisesFiltrados = todosLosPaises.filter(pais => {
-    const nombreComun = pais.names?.common || '';
-    return nombreComun.toLowerCase().includes(textoBusqueda);
+    const paisesFiltrados = todosLosPaises.filter(pais => {
+      const nombreComun = pais.names?.common || '';
+      return nombreComun.toLowerCase().includes(textoBusqueda);
+    });
+
+    manejarResultados(paisesFiltrados);
   });
-
-  manejarResultados(paisesFiltrados);
-});
+}
 
 function manejarResultados(paises) {
+  if (!resultContainer) return;
   resultContainer.innerHTML = '';
 
   if (paises.length > 10) {
@@ -261,7 +293,7 @@ function manejarResultados(paises) {
       `;
 
       card.addEventListener('click', () => {
-        input.value = commonName;
+        if (input) input.value = commonName;
         manejarResultados([pais]);
       });
 
@@ -315,10 +347,11 @@ function manejarResultados(paises) {
       </div>
     `;
 
+    const weatherBoxEl = document.getElementById('weatherBox');
     if (capital !== 'No disponible') {
       obtenerClima(capital);
-    } else {
-      document.getElementById('weatherBox').innerHTML = `<p>Clima no disponible</p>`;
+    } else if (weatherBoxEl) {
+      weatherBoxEl.innerHTML = `<p>Clima no disponible</p>`;
     }
     return;
   }
@@ -331,6 +364,8 @@ function manejarResultados(paises) {
 
 async function obtenerClima(ciudad) {
   const weatherBox = document.getElementById('weatherBox');
+  if (!weatherBox) return;
+
   try {
     const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(ciudad)}&units=metric&appid=${API_KEY_WEATHER}&lang=es`);
     const data = await response.json();
